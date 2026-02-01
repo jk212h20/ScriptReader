@@ -1,0 +1,53 @@
+# ScriptReader - Project Intelligence
+
+## Project Overview
+ScriptReader is a smart script companion app for solo actors to practice with AI scene partners.
+
+## Key Patterns & Preferences
+
+### Technology Stack
+- Next.js 14+ with App Router
+- TypeScript strict mode
+- Tailwind CSS for styling
+- Zustand for state management
+- PWA for cross-platform support
+
+### Code Style
+- Functional components with hooks
+- Separate concerns into custom hooks
+- Keep components small and focused
+- Use TypeScript interfaces for all data models
+
+### File Organization
+```
+/src/app          - Pages and API routes
+/src/components   - React components (ui/, script/, audio/)
+/src/lib          - Utilities (parser/, speech/, store/)
+/src/types        - TypeScript definitions
+```
+
+### API Key Handling
+- User provides their own Anthropic API key
+- Store in localStorage (user's responsibility)
+- Pass through Next.js API routes
+
+### Critical Implementation Notes
+1. **Auto-Follow Engine** is the core feature - no manual tap to advance
+2. Use Web Speech API for free tier, ElevenLabs for premium
+3. Fuzzy matching needed for speech recognition (people don't read perfectly)
+4. Silence detection threshold: start with 1.5-2 seconds
+
+### Testing Approach
+- Test speech recognition in Chrome first (best support)
+- Mobile testing important (iOS Safari has audio restrictions)
+- Use sample scripts for consistent testing
+
+## Common Commands
+```bash
+npm run dev      # Start development server
+npm run build    # Build for production
+npm run lint     # Run ESLint
+```
+
+## Memory Bank Location
+All project documentation in `/memory-bank/` directory.
