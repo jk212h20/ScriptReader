@@ -28,12 +28,14 @@ export default function FileUpload() {
       if (file.type === 'text/plain') {
         textContent = await file.text()
       } else if (file.type === 'application/pdf') {
-        // Dynamically import PDF.js to avoid SSR issues
-        const pdfjsLib = await import('pdfjs-dist')
-        pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
+        // Dynamically import PDF.js legacy build for better browser compatibility
+        const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs')
+        
+        // Use unpkg CDN which is more reliable than cdnjs for pdf.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/legacy/build/pdf.worker.min.mjs`
         
         const arrayBuffer = await file.arrayBuffer()
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+        const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise
         
         const textParts: string[] = []
         for (let i = 1; i <= pdf.numPages; i++) {
