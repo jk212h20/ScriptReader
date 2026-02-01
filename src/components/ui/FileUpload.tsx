@@ -28,10 +28,23 @@ export default function FileUpload() {
       if (file.type === 'text/plain') {
         textContent = await file.text()
       } else if (file.type === 'application/pdf') {
-        // TODO: Implement PDF parsing with PDF.js
-        setError('PDF parsing coming soon!')
-        setIsProcessing(false)
-        return
+        // Dynamically import PDF.js to avoid SSR issues
+        const pdfjsLib = await import('pdfjs-dist')
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
+        
+        const arrayBuffer = await file.arrayBuffer()
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+        
+        const textParts: string[] = []
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i)
+          const content = await page.getTextContent()
+          const pageText = content.items
+            .map((item) => ('str' in item ? (item as { str: string }).str : ''))
+            .join(' ')
+          textParts.push(pageText)
+        }
+        textContent = textParts.join('\n\n')
       } else if (file.type.startsWith('image/')) {
         // TODO: Implement OCR with Tesseract.js
         setError('Image OCR coming soon!')
