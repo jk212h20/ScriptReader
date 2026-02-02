@@ -16,7 +16,7 @@
 - ✅ Pushed to GitHub: https://github.com/jk212h20/ScriptReader.git
 
 ## What's In Progress
-- 🔄 Performance mode (auto-follow engine)
+- 🔄 Testing and refinement of auto-follow engine
 
 ## What's Left to Build
 
@@ -34,25 +34,25 @@
 - [x] Settings page for API keys
 
 ### Phase 2: Voice System
-- [ ] Web Speech API TTS wrapper
+- [x] Web Speech API TTS wrapper
 - [ ] Voice selection dropdown per character
 - [ ] Claude API for voice suggestions
-- [ ] Audio playback queue/manager
+- [x] Audio playback queue/manager
 - [ ] Voice preview functionality
 
-### Phase 3: Auto-Follow Engine
-- [ ] Web Speech API recognition wrapper
-- [ ] Continuous listening mode
-- [ ] Word-by-word matching algorithm
-- [ ] Fuzzy matching for variations
-- [ ] Silence detection (VAD)
-- [ ] Line completion detection
-- [ ] Auto-advance logic
-- [ ] Visual progress indicators
-- [ ] Current line highlighting
-- [ ] Word-level progress display
-- [ ] Manual resync button
-- [ ] Error recovery UI
+### Phase 3: Auto-Follow Engine - ✅ COMPLETE
+- [x] Web Speech API recognition wrapper
+- [x] Continuous listening mode
+- [x] Word-by-word matching algorithm
+- [x] Fuzzy matching for variations
+- [x] Silence detection (0.4s threshold)
+- [x] Line completion detection (75% match threshold)
+- [x] Auto-advance logic
+- [x] Visual progress indicators
+- [x] Current line highlighting
+- [x] Word-level progress display
+- [x] Manual skip/resync button
+- [x] Error recovery UI
 
 ### Phase 4: Polish & Premium
 - [ ] ElevenLabs API integration

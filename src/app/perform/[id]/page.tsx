@@ -5,7 +5,15 @@ import { useRouter, useParams } from 'next/navigation'
 import { useScriptStore } from '@/lib/store/scriptStore'
 import { useSettingsStore } from '@/lib/store/settingsStore'
 import { ttsService } from '@/lib/speech/tts'
+import { recognitionService } from '@/lib/speech/recognition'
+import { createLineMatcher, getWords, type MatchResult } from '@/lib/speech/matcher'
+import { audioCache, getCacheKey } from '@/lib/speech/audioCache'
 import type { ScriptLine, Character } from '@/types'
+
+// Default silence threshold in milliseconds (user requested 0.4 seconds)
+const DEFAULT_SILENCE_THRESHOLD = 400
+// Match percentage needed to consider line complete
+const COMPLETION_THRESHOLD = 0.75
 
 export default function PerformPage() {
   const router = useRouter()
@@ -17,8 +25,16 @@ export default function PerformPage() {
   const [currentLineIndex, setCurrentLineIndex] = useState(0)
   const [waitingForHuman, setWaitingForHuman] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
+  const [isListening, setIsListening] = useState(false)
+  const [matchResult, setMatchResult] = useState<MatchResult | null>(null)
+  const [heardText, setHeardText] = useState('')
+  const [recognitionError, setRecognitionError] = useState<string | null>(null)
+  
   const lineRefs = useRef<(HTMLDivElement | null)[]>([])
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const lineMatcherRef = useRef<ReturnType<typeof createLineMatcher> | null>(null)
+  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const lastSpeechTimeRef = useRef<number>(0)
 
   useEffect(() => {
     const scriptId = params.id as string
@@ -41,31 +57,55 @@ export default function PerformPage() {
     }
   }, [currentLineIndex])
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current)
+      }
+      recognitionService?.stop()
+    }
+  }, [])
+
   // Get character's voice description
   const getCharacterVoice = useCallback((characterName: string | null): Character | undefined => {
     if (!currentScript || !characterName) return undefined
     return currentScript.characters.find(c => c.name === characterName)
   }, [currentScript])
 
-  // Speak using ElevenLabs
+  // Speak using ElevenLabs (with persistent caching)
   const speakWithElevenLabs = useCallback(async (text: string, voiceDescription?: string): Promise<void> => {
     return new Promise(async (resolve, reject) => {
       try {
-        const response = await fetch('/api/tts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            text,
-            voiceDescription
-            // Server uses ELEVENLABS_API_KEY env var
+        // Check cache first (IndexedDB + memory)
+        const cacheKey = getCacheKey(text, voiceDescription)
+        let audioBlob = await audioCache?.get(cacheKey)
+        
+        if (!audioBlob) {
+          // Not in cache - fetch from API
+          console.log('TTS cache miss - fetching from API')
+          const response = await fetch('/api/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              text,
+              voiceDescription
+            })
           })
-        })
 
-        if (!response.ok) {
-          throw new Error('ElevenLabs TTS failed')
+          if (!response.ok) {
+            throw new Error('ElevenLabs TTS failed')
+          }
+
+          audioBlob = await response.blob()
+          
+          // Store in cache for future use (persists to IndexedDB)
+          await audioCache?.set(cacheKey, audioBlob)
+          console.log('TTS cached to IndexedDB:', cacheKey)
+        } else {
+          console.log('TTS cache hit:', cacheKey)
         }
 
-        const audioBlob = await response.blob()
         const audioUrl = URL.createObjectURL(audioBlob)
         
         if (audioRef.current) {
@@ -112,7 +152,6 @@ export default function PerformPage() {
       }
     } catch (error) {
       console.error('TTS error:', error)
-      // Fallback to Web Speech if ElevenLabs fails
       if (useElevenLabs) {
         try {
           await speakWithWebSpeech(line.text)
@@ -125,19 +164,84 @@ export default function PerformPage() {
     }
   }, [useElevenLabs, getCharacterVoice, speakWithElevenLabs, speakWithWebSpeech])
 
+  // Stop listening for speech
+  const stopListening = useCallback(() => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current)
+      silenceTimerRef.current = null
+    }
+    recognitionService?.stop()
+    setIsListening(false)
+    lineMatcherRef.current = null
+  }, [])
+
   const advanceToNextLine = useCallback(() => {
     if (!currentScript) return
     
+    // Stop listening when advancing
+    stopListening()
+    
     const nextIndex = currentLineIndex + 1
     if (nextIndex >= currentScript.lines.length) {
-      // End of script
       setIsPlaying(false)
       setCurrentLineIndex(0)
       return
     }
     
     setCurrentLineIndex(nextIndex)
-  }, [currentScript, currentLineIndex])
+  }, [currentScript, currentLineIndex, stopListening])
+
+  // Handle speech recognition results
+  const handleSpeechResult = useCallback((transcript: string, _isFinal: boolean) => {
+    setHeardText(transcript)
+    lastSpeechTimeRef.current = Date.now()
+    
+    // Clear any existing silence timer
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current)
+    }
+    
+    // Update the line matcher
+    if (lineMatcherRef.current) {
+      const result = lineMatcherRef.current.update(transcript)
+      setMatchResult(result)
+      
+      // Check if line is complete
+      if (result.isComplete) {
+        // Start silence timer - advance after brief pause
+        silenceTimerRef.current = setTimeout(() => {
+          advanceToNextLine()
+        }, DEFAULT_SILENCE_THRESHOLD)
+      }
+    }
+  }, [advanceToNextLine])
+
+  // Start listening for the human's line
+  const startListening = useCallback((expectedText: string) => {
+    if (!recognitionService?.isAvailable()) {
+      setRecognitionError('Speech recognition not available in this browser')
+      return
+    }
+    
+    // Create a new line matcher for this line
+    lineMatcherRef.current = createLineMatcher(expectedText, COMPLETION_THRESHOLD)
+    setMatchResult(null)
+    setHeardText('')
+    setRecognitionError(null)
+    lastSpeechTimeRef.current = Date.now()
+    
+    const started = recognitionService.start(
+      handleSpeechResult,
+      (error) => {
+        setRecognitionError(error)
+        console.error('Recognition error:', error)
+      }
+    )
+    
+    if (started) {
+      setIsListening(true)
+    }
+  }, [handleSpeechResult])
 
   const playCurrentLine = useCallback(async () => {
     if (!currentScript || !isPlaying) return
@@ -154,6 +258,8 @@ export default function PerformPage() {
     // Check if this is a human line
     if (line.assignedTo === 'human') {
       setWaitingForHuman(true)
+      // Start listening for the human's line
+      startListening(line.text)
       return
     }
 
@@ -161,14 +267,14 @@ export default function PerformPage() {
     setWaitingForHuman(false)
     await speakLine(line)
     advanceToNextLine()
-  }, [currentScript, currentLineIndex, isPlaying, speakLine, advanceToNextLine])
+  }, [currentScript, currentLineIndex, isPlaying, speakLine, advanceToNextLine, startListening])
 
   // Auto-play when line changes
   useEffect(() => {
-    if (isPlaying && !isSpeaking) {
+    if (isPlaying && !isSpeaking && !waitingForHuman) {
       playCurrentLine()
     }
-  }, [currentLineIndex, isPlaying, isSpeaking, playCurrentLine])
+  }, [currentLineIndex, isPlaying, isSpeaking, waitingForHuman, playCurrentLine])
 
   const handlePlay = () => {
     setIsPlaying(true)
@@ -178,6 +284,7 @@ export default function PerformPage() {
 
   const handlePause = () => {
     setIsPlaying(false)
+    stopListening()
     ttsService?.stop()
     if (audioRef.current) {
       audioRef.current.pause()
@@ -189,6 +296,9 @@ export default function PerformPage() {
     setCurrentLineIndex(0)
     setWaitingForHuman(false)
     setIsSpeaking(false)
+    setMatchResult(null)
+    setHeardText('')
+    stopListening()
     ttsService?.stop()
     if (audioRef.current) {
       audioRef.current.pause()
@@ -196,13 +306,16 @@ export default function PerformPage() {
     }
   }
 
+  // Manual advance (fallback if auto-follow doesn't work)
   const handleHumanDone = () => {
     setWaitingForHuman(false)
     advanceToNextLine()
   }
 
   const handleLineClick = (index: number) => {
+    stopListening()
     setCurrentLineIndex(index)
+    setWaitingForHuman(false)
     if (!isPlaying) {
       setIsPlaying(true)
     }
@@ -218,6 +331,11 @@ export default function PerformPage() {
 
   const currentLine = currentScript.lines[currentLineIndex]
   const humanCharacters = currentScript.characters.filter(c => c.assignedTo === 'human').map(c => c.name)
+  
+  // Get words for highlighting
+  const expectedWords = currentLine?.type === 'dialogue' && currentLine.assignedTo === 'human'
+    ? getWords(currentLine.text)
+    : []
 
   return (
     <main className="min-h-screen flex flex-col bg-black">
@@ -231,6 +349,12 @@ export default function PerformPage() {
               {useElevenLabs && (
                 <span className="px-2 py-0.5 bg-purple-900/50 text-purple-300 rounded text-xs">
                   ElevenLabs
+                </span>
+              )}
+              {isListening && (
+                <span className="px-2 py-0.5 bg-green-900/50 text-green-300 rounded text-xs flex items-center gap-1">
+                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                  Listening
                 </span>
               )}
             </div>
@@ -276,7 +400,24 @@ export default function PerformPage() {
                       {isHumanLine && ' (YOU)'}
                     </div>
                     <div className={`text-lg ${isCurrentLine ? 'text-white' : 'text-gray-300'}`}>
-                      {line.text}
+                      {/* Show word-by-word highlighting for current human line */}
+                      {isCurrentLine && isHumanLine && matchResult ? (
+                        <span>
+                          {expectedWords.map((word, wordIndex) => {
+                            const isMatched = matchResult.matchedIndices.includes(wordIndex)
+                            return (
+                              <span
+                                key={wordIndex}
+                                className={`${isMatched ? 'text-green-400' : 'text-white'} transition-colors`}
+                              >
+                                {word}{' '}
+                              </span>
+                            )
+                          })}
+                        </span>
+                      ) : (
+                        line.text
+                      )}
                     </div>
                   </>
                 ) : (
@@ -298,11 +439,48 @@ export default function PerformPage() {
               <p className="text-green-400 text-lg font-medium">
                 Your turn! Read your line as {currentLine?.character}
               </p>
+              
+              {/* Progress indicator */}
+              {matchResult && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-center gap-2 text-sm">
+                    <span className="text-gray-400">Progress:</span>
+                    <span className="text-green-400 font-mono">
+                      {Math.round(matchResult.matchPercentage)}%
+                    </span>
+                    <span className="text-gray-500">
+                      ({matchResult.matchedWords}/{matchResult.totalWords} words)
+                    </span>
+                  </div>
+                  <div className="w-full max-w-md mx-auto h-2 bg-gray-700 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-green-500 transition-all duration-200"
+                      style={{ width: `${matchResult.matchPercentage}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+              
+              {/* What we heard */}
+              {heardText && (
+                <p className="text-gray-500 text-sm italic max-w-md mx-auto">
+                  Heard: &ldquo;{heardText}&rdquo;
+                </p>
+              )}
+              
+              {/* Recognition error */}
+              {recognitionError && (
+                <p className="text-red-400 text-sm">
+                  ⚠️ {recognitionError}
+                </p>
+              )}
+              
+              {/* Manual fallback button */}
               <button
                 onClick={handleHumanDone}
-                className="px-8 py-4 bg-green-600 hover:bg-green-700 rounded-xl text-lg font-bold transition-colors"
+                className="px-6 py-3 bg-gray-700 hover:bg-gray-600 rounded-xl text-sm font-medium transition-colors"
               >
-                Done Reading ✓
+                Skip / Done Manually →
               </button>
             </div>
           ) : (

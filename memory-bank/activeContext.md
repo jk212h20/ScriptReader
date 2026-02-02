@@ -1,7 +1,7 @@
 # ScriptReader - Active Context
 
 ## Current Focus
-Phase 1 MVP complete! Ready for Phase 2 (Voice System) or Phase 3 (Auto-Follow Engine).
+Phase 3 Auto-Follow Engine complete! The app now listens to the user and follows along with their reading.
 
 ## Recent Decisions
 
@@ -18,6 +18,14 @@ Phase 1 MVP complete! Ready for Phase 2 (Voice System) or Phase 3 (Auto-Follow E
 - **Editable scripts** - Toggle button to enable editing mode
 - **AI voice suggestions** - Claude picks reasonable defaults by context
 
+### Auto-Follow Implementation (NEW)
+- **Word-by-word matching** - Matches spoken words to expected script text
+- **Fuzzy matching** - Handles pronunciation variations (30% tolerance)
+- **Common substitutions** - Maps "gonna" → "going to", etc.
+- **75% completion threshold** - Advances when 75% of words matched
+- **0.4 second silence** - Brief pause after completion confirms done
+- **Visual feedback** - Word highlighting, progress bar, heard text display
+
 ## Next Steps
 
 ### Completed (Phase 1) ✅
@@ -31,18 +39,24 @@ Phase 1 MVP complete! Ready for Phase 2 (Voice System) or Phase 3 (Auto-Follow E
 8. ✅ Settings page for API keys
 9. ✅ Push to GitHub & Railway-ready
 
-### Next Up (Phase 2 - Voice System)
-- Web Speech API TTS integration
-- Voice selection UI per character
-- Audio playback queue/manager
-- Voice preview functionality
+### Completed (Phase 3 - Auto-Follow Engine) ✅
+- ✅ Web Speech API recognition wrapper (`/src/lib/speech/recognition.ts`)
+- ✅ Continuous listening mode with auto-restart
+- ✅ Fuzzy word matching algorithm (`/src/lib/speech/matcher.ts`)
+- ✅ Silence detection (0.4s threshold per user request)
+- ✅ Auto-advance logic when line complete
+- ✅ Visual progress indicators (progress bar, word highlighting)
+- ✅ Manual skip button as fallback
 
-### Future (Phase 3 - Auto-Follow Engine)
-- Web Speech API recognition wrapper
-- Continuous listening mode
-- Fuzzy word matching algorithm
-- Silence detection (VAD)
-- Auto-advance logic
+### Next Up (Phase 2 - Voice System Refinement)
+- Voice selection UI per character
+- Voice preview functionality
+- Claude API for voice suggestions
+
+### Future (Phase 4 - Polish)
+- ElevenLabs premium voices
+- Mobile-responsive design
+- Performance optimization
 
 ## Active Considerations
 
