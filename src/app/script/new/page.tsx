@@ -13,9 +13,12 @@ export default function NewScriptPage() {
   
   const [status, setStatus] = useState<'loading' | 'parsing' | 'error' | 'needsKey'>('loading')
   const [error, setError] = useState<string | null>(null)
+  const [errorStage, setErrorStage] = useState<string | null>(null)
+  const [debugInfo, setDebugInfo] = useState<string | null>(null)
   const [rawText, setRawText] = useState<string>('')
   const [fileName, setFileName] = useState<string>('')
   const [serverHasKey, setServerHasKey] = useState<boolean | null>(null)
+  const [parsingStage, setParsingStage] = useState<string>('Starting...')
 
   useEffect(() => {
     // Check if server has a default API key
@@ -53,6 +56,9 @@ export default function NewScriptPage() {
   const parseScript = async (text: string, apiKey?: string) => {
     setStatus('parsing')
     setError(null)
+    setErrorStage(null)
+    setDebugInfo(null)
+    setParsingStage('Sending to AI...')
 
     try {
       const response = await fetch('/api/parse-script', {
@@ -61,10 +67,13 @@ export default function NewScriptPage() {
         body: JSON.stringify({ rawText: text, apiKey }),
       })
 
+      setParsingStage('Processing response...')
       const data = await response.json()
 
       if (!data.success) {
         setError(data.error || 'Failed to parse script')
+        setErrorStage(data.stage || 'unknown')
+        setDebugInfo(data.debug || null)
         setStatus('error')
         return
       }
@@ -111,8 +120,11 @@ export default function NewScriptPage() {
             <div>
               <p className="text-lg font-medium">Parsing Script</p>
               <p className="text-gray-400 text-sm mt-1">{fileName}</p>
-              <p className="text-gray-500 text-xs mt-4">
-                AI is analyzing characters and dialogue...
+              <p className="text-blue-400 text-sm mt-4 font-medium">
+                {parsingStage}
+              </p>
+              <p className="text-gray-500 text-xs mt-2">
+                This may take 10-30 seconds for longer scripts
               </p>
             </div>
           </>
@@ -142,10 +154,23 @@ export default function NewScriptPage() {
             <div>
               <p className="text-lg font-medium text-red-400">Parsing Failed</p>
               <p className="text-gray-400 text-sm mt-2">{error}</p>
+              {errorStage && (
+                <p className="text-gray-500 text-xs mt-1">
+                  Stage: {errorStage}
+                </p>
+              )}
             </div>
+            {debugInfo && (
+              <div className="mt-4 p-3 bg-gray-800 rounded-lg text-left overflow-auto max-h-40">
+                <p className="text-xs text-gray-500 mb-1">Debug info:</p>
+                <pre className="text-xs text-gray-400 whitespace-pre-wrap break-all">
+                  {debugInfo}
+                </pre>
+              </div>
+            )}
             <div className="flex gap-4 justify-center">
               <button
-                onClick={handleRetry}
+                onClick={() => parseScript(rawText, anthropicApiKey || undefined)}
                 className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors"
               >
                 Retry

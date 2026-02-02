@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { jsonrepair } from 'jsonrepair'
 import type { Script, ScriptLine, Character } from '@/types'
 
 const PARSE_PROMPT = `You are a script parser. Analyze the following script text and extract:
@@ -40,7 +41,7 @@ export async function POST(request: NextRequest) {
 
     if (!rawText) {
       return NextResponse.json(
-        { success: false, error: 'No script text provided' },
+        { success: false, error: 'No script text provided', stage: 'validation' },
         { status: 400 }
       )
     }
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
     
     if (!effectiveApiKey) {
       return NextResponse.json(
-        { success: false, error: 'API key required' },
+        { success: false, error: 'API key required', stage: 'validation' },
         { status: 401 }
       )
     }
@@ -59,62 +60,91 @@ export async function POST(request: NextRequest) {
       apiKey: effectiveApiKey,
     })
 
-    const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 8192,
-      messages: [
-        {
-          role: 'user',
-          content: PARSE_PROMPT + rawText
-        },
-        {
-          role: 'assistant',
-          content: '{'
-        }
-      ]
-    })
+    let message
+    try {
+      message = await anthropic.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 8192,
+        messages: [
+          {
+            role: 'user',
+            content: PARSE_PROMPT + rawText
+          },
+          {
+            role: 'assistant',
+            content: '{'
+          }
+        ]
+      })
+    } catch (apiError) {
+      const errorMessage = apiError instanceof Error ? apiError.message : 'Unknown API error'
+      console.error('Anthropic API error:', errorMessage)
+      return NextResponse.json(
+        { success: false, error: `AI API error: ${errorMessage}`, stage: 'ai_call' },
+        { status: 500 }
+      )
+    }
 
     // Extract the text content from the response (prepend { since we prefilled it)
     const responseText = message.content[0].type === 'text' 
       ? '{' + message.content[0].text 
       : ''
 
+    if (!responseText || responseText === '{') {
+      return NextResponse.json(
+        { success: false, error: 'AI returned empty response', stage: 'ai_response' },
+        { status: 500 }
+      )
+    }
+
     // Parse the JSON from the response
     const jsonMatch = responseText.match(/\{[\s\S]*\}/)
     if (!jsonMatch) {
       return NextResponse.json(
-        { success: false, error: 'Failed to parse script structure' },
+        { success: false, error: 'Could not find JSON in AI response', stage: 'json_extract' },
         { status: 500 }
       )
     }
 
     let parsed
     try {
+      // First try direct parse
       parsed = JSON.parse(jsonMatch[0])
     } catch (jsonError) {
-      // Try to fix common JSON issues
-      let fixedJson = jsonMatch[0]
-        // Remove trailing commas before ] or }
-        .replace(/,(\s*[}\]])/g, '$1')
-        // Fix unescaped quotes in strings (basic attempt)
-        .replace(/([^\\])"/g, (match, p1, offset, str) => {
-          // Check if we're inside a string value
-          const before = str.substring(0, offset)
-          const colonCount = (before.match(/:/g) || []).length
-          const openBraceCount = (before.match(/{/g) || []).length
-          // This is a heuristic - not perfect but helps
-          return match
-        })
-      
+      // Use jsonrepair to fix malformed JSON
       try {
-        parsed = JSON.parse(fixedJson)
-      } catch {
-        console.error('JSON parse failed even after fix attempt:', jsonError)
+        const repairedJson = jsonrepair(jsonMatch[0])
+        parsed = JSON.parse(repairedJson)
+        console.log('JSON repaired successfully')
+      } catch (repairError) {
+        const errorMessage = jsonError instanceof Error ? jsonError.message : 'Unknown JSON error'
+        console.error('JSON parse failed even after repair:', errorMessage)
         return NextResponse.json(
-          { success: false, error: 'Failed to parse AI response as JSON' },
+          { 
+            success: false, 
+            error: `JSON parsing failed: ${errorMessage}`, 
+            stage: 'json_parse',
+            // Include first 500 chars of response for debugging
+            debug: jsonMatch[0].substring(0, 500) + '...'
+          },
           { status: 500 }
         )
       }
+    }
+
+    // Validate parsed structure
+    if (!parsed.characters || !Array.isArray(parsed.characters)) {
+      return NextResponse.json(
+        { success: false, error: 'AI response missing characters array', stage: 'validation' },
+        { status: 500 }
+      )
+    }
+
+    if (!parsed.lines || !Array.isArray(parsed.lines)) {
+      return NextResponse.json(
+        { success: false, error: 'AI response missing lines array', stage: 'validation' },
+        { status: 500 }
+      )
     }
 
     // Generate IDs and build the full Script object
@@ -149,9 +179,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, script })
 
   } catch (error) {
-    console.error('Parse script error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    console.error('Parse script error:', errorMessage)
     return NextResponse.json(
-      { success: false, error: 'Failed to parse script' },
+      { success: false, error: `Unexpected error: ${errorMessage}`, stage: 'unknown' },
       { status: 500 }
     )
   }
