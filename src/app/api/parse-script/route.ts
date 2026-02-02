@@ -42,7 +42,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!apiKey) {
+    // Use provided API key or fall back to server environment variable
+    const effectiveApiKey = apiKey || process.env.ANTHROPIC_API_KEY
+    
+    if (!effectiveApiKey) {
       return NextResponse.json(
         { success: false, error: 'API key required' },
         { status: 401 }
@@ -50,7 +53,7 @@ export async function POST(request: NextRequest) {
     }
 
     const anthropic = new Anthropic({
-      apiKey: apiKey,
+      apiKey: effectiveApiKey,
     })
 
     const message = await anthropic.messages.create({

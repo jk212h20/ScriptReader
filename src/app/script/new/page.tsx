@@ -15,8 +15,20 @@ export default function NewScriptPage() {
   const [error, setError] = useState<string | null>(null)
   const [rawText, setRawText] = useState<string>('')
   const [fileName, setFileName] = useState<string>('')
+  const [serverHasKey, setServerHasKey] = useState<boolean | null>(null)
 
   useEffect(() => {
+    // Check if server has a default API key
+    fetch('/api/has-api-key')
+      .then(res => res.json())
+      .then(data => setServerHasKey(data.hasKey))
+      .catch(() => setServerHasKey(false))
+  }, [])
+
+  useEffect(() => {
+    // Wait for server key check
+    if (serverHasKey === null) return
+
     // Get pending script from localStorage
     const pending = localStorage.getItem('pendingScript')
     if (!pending) {
@@ -28,17 +40,17 @@ export default function NewScriptPage() {
     setRawText(text)
     setFileName(name)
 
-    // Check for API key
-    if (!anthropicApiKey) {
+    // Check for API key (user's key or server default)
+    if (!anthropicApiKey && !serverHasKey) {
       setStatus('needsKey')
       return
     }
 
-    // Parse the script
-    parseScript(text, anthropicApiKey)
-  }, [anthropicApiKey, router])
+    // Parse the script (pass user's key if they have one, otherwise server will use default)
+    parseScript(text, anthropicApiKey || undefined)
+  }, [anthropicApiKey, serverHasKey, router])
 
-  const parseScript = async (text: string, apiKey: string) => {
+  const parseScript = async (text: string, apiKey?: string) => {
     setStatus('parsing')
     setError(null)
 

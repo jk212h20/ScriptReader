@@ -24,7 +24,7 @@
 - [x] Next.js project with TypeScript & Tailwind
 - [x] PWA configuration (manifest)
 - [x] File upload component (drag & drop)
-- [ ] PDF parsing with PDF.js
+- [x] PDF parsing with PDF.js (legacy build + unpkg CDN worker)
 - [ ] Image OCR with Tesseract.js
 - [x] Claude API integration for script parsing
 - [x] Script display component (teleprompter style)
