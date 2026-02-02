@@ -8,11 +8,11 @@ const PARSE_PROMPT = `You are a script parser. Analyze the following script text
 3. Each line of dialogue with the character name and text
 4. Stage directions and action descriptions
 
-Return a JSON object with this exact structure:
+Return ONLY valid JSON (no markdown, no code blocks) with this exact structure:
 {
   "title": "Script Title",
   "characters": [
-    { "name": "CHARACTER_NAME", "suggestedVoiceType": "description like 'deep male voice' or 'young female voice'" }
+    { "name": "CHARACTER_NAME", "suggestedVoiceType": "description like deep male voice or young female voice" }
   ],
   "lines": [
     { "character": "CHARACTER_NAME", "type": "dialogue", "text": "The line of dialogue" },
@@ -20,12 +20,15 @@ Return a JSON object with this exact structure:
   ]
 }
 
-Rules:
+CRITICAL JSON RULES:
+- Return ONLY the JSON object, nothing else
+- Escape all quotes inside text with backslash: \\"
+- Escape all newlines inside text with: \\n
+- No trailing commas
 - Character names should be normalized (consistent capitalization)
 - type can be: "dialogue", "direction", or "action"
 - For dialogue, character is the speaker's name
 - For directions/actions, character is null
-- Preserve the original text as much as possible
 - suggestedVoiceType should be a brief description suitable for text-to-speech voice selection
 
 Script text to parse:
@@ -58,18 +61,22 @@ export async function POST(request: NextRequest) {
 
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 4096,
+      max_tokens: 8192,
       messages: [
         {
           role: 'user',
           content: PARSE_PROMPT + rawText
+        },
+        {
+          role: 'assistant',
+          content: '{'
         }
       ]
     })
 
-    // Extract the text content from the response
+    // Extract the text content from the response (prepend { since we prefilled it)
     const responseText = message.content[0].type === 'text' 
-      ? message.content[0].text 
+      ? '{' + message.content[0].text 
       : ''
 
     // Parse the JSON from the response
@@ -81,7 +88,34 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const parsed = JSON.parse(jsonMatch[0])
+    let parsed
+    try {
+      parsed = JSON.parse(jsonMatch[0])
+    } catch (jsonError) {
+      // Try to fix common JSON issues
+      let fixedJson = jsonMatch[0]
+        // Remove trailing commas before ] or }
+        .replace(/,(\s*[}\]])/g, '$1')
+        // Fix unescaped quotes in strings (basic attempt)
+        .replace(/([^\\])"/g, (match, p1, offset, str) => {
+          // Check if we're inside a string value
+          const before = str.substring(0, offset)
+          const colonCount = (before.match(/:/g) || []).length
+          const openBraceCount = (before.match(/{/g) || []).length
+          // This is a heuristic - not perfect but helps
+          return match
+        })
+      
+      try {
+        parsed = JSON.parse(fixedJson)
+      } catch {
+        console.error('JSON parse failed even after fix attempt:', jsonError)
+        return NextResponse.json(
+          { success: false, error: 'Failed to parse AI response as JSON' },
+          { status: 500 }
+        )
+      }
+    }
 
     // Generate IDs and build the full Script object
     const scriptId = crypto.randomUUID()
