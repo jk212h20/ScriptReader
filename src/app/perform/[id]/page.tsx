@@ -3,18 +3,22 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useScriptStore } from '@/lib/store/scriptStore'
+import { useSettingsStore } from '@/lib/store/settingsStore'
 import { ttsService } from '@/lib/speech/tts'
-import type { ScriptLine } from '@/types'
+import type { ScriptLine, Character } from '@/types'
 
 export default function PerformPage() {
   const router = useRouter()
   const params = useParams()
   const { currentScript, scripts, setCurrentScript } = useScriptStore()
+  const { useElevenLabs, elevenLabsApiKey } = useSettingsStore()
   
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentLineIndex, setCurrentLineIndex] = useState(0)
   const [waitingForHuman, setWaitingForHuman] = useState(false)
+  const [isSpeaking, setIsSpeaking] = useState(false)
   const lineRefs = useRef<(HTMLDivElement | null)[]>([])
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => {
     const scriptId = params.id as string
@@ -37,15 +41,89 @@ export default function PerformPage() {
     }
   }, [currentLineIndex])
 
+  // Get character's voice description
+  const getCharacterVoice = useCallback((characterName: string | null): Character | undefined => {
+    if (!currentScript || !characterName) return undefined
+    return currentScript.characters.find(c => c.name === characterName)
+  }, [currentScript])
+
+  // Speak using ElevenLabs
+  const speakWithElevenLabs = useCallback(async (text: string, voiceDescription?: string): Promise<void> => {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const response = await fetch('/api/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text,
+            voiceDescription,
+            apiKey: elevenLabsApiKey
+          })
+        })
+
+        if (!response.ok) {
+          throw new Error('ElevenLabs TTS failed')
+        }
+
+        const audioBlob = await response.blob()
+        const audioUrl = URL.createObjectURL(audioBlob)
+        
+        if (audioRef.current) {
+          audioRef.current.pause()
+        }
+        
+        const audio = new Audio(audioUrl)
+        audioRef.current = audio
+        
+        audio.onended = () => {
+          URL.revokeObjectURL(audioUrl)
+          resolve()
+        }
+        
+        audio.onerror = () => {
+          URL.revokeObjectURL(audioUrl)
+          reject(new Error('Audio playback failed'))
+        }
+        
+        await audio.play()
+      } catch (error) {
+        reject(error)
+      }
+    })
+  }, [elevenLabsApiKey])
+
+  // Speak using Web Speech API
+  const speakWithWebSpeech = useCallback(async (text: string): Promise<void> => {
+    if (!ttsService) throw new Error('TTS not available')
+    await ttsService.speak(text)
+  }, [])
+
   const speakLine = useCallback(async (line: ScriptLine) => {
-    if (!ttsService || line.type !== 'dialogue') return
+    if (line.type !== 'dialogue') return
+    
+    setIsSpeaking(true)
     
     try {
-      await ttsService.speak(line.text)
+      if (useElevenLabs && elevenLabsApiKey) {
+        const character = getCharacterVoice(line.character)
+        await speakWithElevenLabs(line.text, character?.suggestedVoiceType)
+      } else {
+        await speakWithWebSpeech(line.text)
+      }
     } catch (error) {
       console.error('TTS error:', error)
+      // Fallback to Web Speech if ElevenLabs fails
+      if (useElevenLabs) {
+        try {
+          await speakWithWebSpeech(line.text)
+        } catch {
+          console.error('Fallback TTS also failed')
+        }
+      }
+    } finally {
+      setIsSpeaking(false)
     }
-  }, [])
+  }, [useElevenLabs, elevenLabsApiKey, getCharacterVoice, speakWithElevenLabs, speakWithWebSpeech])
 
   const advanceToNextLine = useCallback(() => {
     if (!currentScript) return
@@ -87,10 +165,10 @@ export default function PerformPage() {
 
   // Auto-play when line changes
   useEffect(() => {
-    if (isPlaying) {
+    if (isPlaying && !isSpeaking) {
       playCurrentLine()
     }
-  }, [currentLineIndex, isPlaying, playCurrentLine])
+  }, [currentLineIndex, isPlaying, isSpeaking, playCurrentLine])
 
   const handlePlay = () => {
     setIsPlaying(true)
@@ -101,13 +179,21 @@ export default function PerformPage() {
   const handlePause = () => {
     setIsPlaying(false)
     ttsService?.stop()
+    if (audioRef.current) {
+      audioRef.current.pause()
+    }
   }
 
   const handleStop = () => {
     setIsPlaying(false)
     setCurrentLineIndex(0)
     setWaitingForHuman(false)
+    setIsSpeaking(false)
     ttsService?.stop()
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current = null
+    }
   }
 
   const handleHumanDone = () => {
@@ -140,9 +226,14 @@ export default function PerformPage() {
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div>
             <h1 className="text-lg font-bold">{currentScript.title}</h1>
-            <p className="text-sm text-gray-500">
-              Line {currentLineIndex + 1} of {currentScript.lines.length}
-            </p>
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <span>Line {currentLineIndex + 1} of {currentScript.lines.length}</span>
+              {useElevenLabs && elevenLabsApiKey && (
+                <span className="px-2 py-0.5 bg-purple-900/50 text-purple-300 rounded text-xs">
+                  ElevenLabs
+                </span>
+              )}
+            </div>
           </div>
           <button
             onClick={() => router.push(`/script/${currentScript.id}`)}
@@ -228,7 +319,7 @@ export default function PerformPage() {
                   onClick={handlePause}
                   className="px-8 py-4 bg-yellow-600 hover:bg-yellow-700 rounded-xl text-lg font-bold transition-colors"
                 >
-                  ⏸ Pause
+                  {isSpeaking ? '🔊 Speaking...' : '⏸ Pause'}
                 </button>
               )}
               <button

@@ -10,6 +10,7 @@ interface SettingsState {
   defaultVoiceRate: number
   defaultVoicePitch: number
   defaultVoiceVolume: number
+  useElevenLabs: boolean  // Toggle between Web Speech and ElevenLabs
   
   // Performance settings
   silenceThreshold: number  // seconds to wait before advancing
@@ -18,6 +19,7 @@ interface SettingsState {
   // Actions
   setAnthropicApiKey: (key: string | null) => void
   setElevenLabsApiKey: (key: string | null) => void
+  setUseElevenLabs: (use: boolean) => void
   updateVoiceSettings: (settings: Partial<{
     defaultVoiceRate: number
     defaultVoicePitch: number
@@ -37,11 +39,13 @@ export const useSettingsStore = create<SettingsState>()(
       defaultVoiceRate: 1,
       defaultVoicePitch: 1,
       defaultVoiceVolume: 1,
+      useElevenLabs: false,
       silenceThreshold: 1.5,
       autoAdvance: true,
 
       setAnthropicApiKey: (key) => set({ anthropicApiKey: key }),
       setElevenLabsApiKey: (key) => set({ elevenLabsApiKey: key }),
+      setUseElevenLabs: (use) => set({ useElevenLabs: use }),
       
       updateVoiceSettings: (settings) => set((state) => ({
         ...state,

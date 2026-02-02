@@ -11,6 +11,8 @@ export default function SettingsPage() {
     setAnthropicApiKey,
     elevenLabsApiKey,
     setElevenLabsApiKey,
+    useElevenLabs,
+    setUseElevenLabs,
     silenceThreshold,
     autoAdvance,
     updatePerformanceSettings
@@ -18,6 +20,7 @@ export default function SettingsPage() {
 
   const [apiKey, setApiKey] = useState('')
   const [elevenKey, setElevenKey] = useState('')
+  const [useEleven, setUseEleven] = useState(false)
   const [threshold, setThreshold] = useState(1.5)
   const [autoAdv, setAutoAdv] = useState(true)
   const [saved, setSaved] = useState(false)
@@ -25,13 +28,15 @@ export default function SettingsPage() {
   useEffect(() => {
     setApiKey(anthropicApiKey || '')
     setElevenKey(elevenLabsApiKey || '')
+    setUseEleven(useElevenLabs)
     setThreshold(silenceThreshold)
     setAutoAdv(autoAdvance)
-  }, [anthropicApiKey, elevenLabsApiKey, silenceThreshold, autoAdvance])
+  }, [anthropicApiKey, elevenLabsApiKey, useElevenLabs, silenceThreshold, autoAdvance])
 
   const handleSave = () => {
     setAnthropicApiKey(apiKey || null)
     setElevenLabsApiKey(elevenKey || null)
+    setUseElevenLabs(useEleven)
     updatePerformanceSettings({
       silenceThreshold: threshold,
       autoAdvance: autoAdv
@@ -104,9 +109,38 @@ export default function SettingsPage() {
                   className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  For premium AI voices. Free tier uses browser voices.
+                  For premium AI voices. Get your key at{' '}
+                  <a 
+                    href="https://elevenlabs.io/" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-400 hover:underline"
+                  >
+                    elevenlabs.io
+                  </a>
                 </p>
               </div>
+
+              {elevenKey && (
+                <div className="flex items-center justify-between p-4 bg-gray-900 rounded-lg">
+                  <div>
+                    <label className="text-sm font-medium">Use ElevenLabs Voices</label>
+                    <p className="text-xs text-gray-500">
+                      Premium AI voices for more realistic character speech
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setUseEleven(!useEleven)}
+                    className={`w-12 h-6 rounded-full transition-colors ${
+                      useEleven ? 'bg-purple-600' : 'bg-gray-700'
+                    }`}
+                  >
+                    <div className={`w-5 h-5 rounded-full bg-white transition-transform ${
+                      useEleven ? 'translate-x-6' : 'translate-x-0.5'
+                    }`} />
+                  </button>
+                </div>
+              )}
             </div>
           </section>
 
