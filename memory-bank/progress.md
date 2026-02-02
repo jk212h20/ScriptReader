@@ -1,5 +1,11 @@
 # ScriptReader - Progress
 
+## Latest Update
+- **Image OCR Support** - Added Claude Vision API integration for reading script images
+  - New `/api/ocr` route extracts text from images using Claude's vision capabilities
+  - Two-step pipeline: OCR (image → text) then Parse (text → structured script)
+  - Supports PNG, JPEG, and WebP image formats
+
 ## What Works
 - ✅ Project concept defined
 - ✅ Architecture planned
@@ -25,7 +31,7 @@
 - [x] PWA configuration (manifest)
 - [x] File upload component (drag & drop)
 - [x] PDF parsing with PDF.js (legacy build + unpkg CDN worker)
-- [ ] Image OCR with Tesseract.js
+- [x] Image OCR with Claude Vision API (two-step pipeline)
 - [x] Claude API integration for script parsing
 - [x] Script display component (teleprompter style)
 - [x] Script editing mode

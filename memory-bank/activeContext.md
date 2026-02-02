@@ -38,6 +38,7 @@ Phase 3 Auto-Follow Engine complete! The app now listens to the user and follows
 7. ✅ Create character role assignment interface
 8. ✅ Settings page for API keys
 9. ✅ Push to GitHub & Railway-ready
+10. ✅ Image OCR support via Claude Vision API
 
 ### Completed (Phase 3 - Auto-Follow Engine) ✅
 - ✅ Web Speech API recognition wrapper (`/src/lib/speech/recognition.ts`)

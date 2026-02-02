@@ -11,6 +11,21 @@ const ACCEPTED_TYPES = {
   'image/webp': ['.webp'],
 }
 
+// Helper function to convert File to base64 string (without data URL prefix)
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      // Remove the data URL prefix (e.g., "data:image/png;base64,")
+      const base64 = result.split(',')[1]
+      resolve(base64)
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
 export default function FileUpload() {
   const [isDragging, setIsDragging] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -48,10 +63,33 @@ export default function FileUpload() {
         }
         textContent = textParts.join('\n\n')
       } else if (file.type.startsWith('image/')) {
-        // TODO: Implement OCR with Tesseract.js
-        setError('Image OCR coming soon!')
-        setIsProcessing(false)
-        return
+        // Use Claude Vision API for OCR
+        const base64 = await fileToBase64(file)
+        
+        // Get API key from localStorage
+        const settingsStr = localStorage.getItem('scriptreader-settings')
+        const settings = settingsStr ? JSON.parse(settingsStr) : {}
+        const apiKey = settings?.state?.anthropicApiKey
+        
+        const ocrResponse = await fetch('/api/ocr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageData: base64,
+            mediaType: file.type,
+            apiKey,
+          }),
+        })
+        
+        const ocrResult = await ocrResponse.json()
+        
+        if (!ocrResult.success) {
+          setError(ocrResult.error || 'Failed to extract text from image')
+          setIsProcessing(false)
+          return
+        }
+        
+        textContent = ocrResult.text
       } else {
         setError('Unsupported file type')
         setIsProcessing(false)
