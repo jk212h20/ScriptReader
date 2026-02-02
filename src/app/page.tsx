@@ -1,4 +1,7 @@
+'use client'
+
 import FileUpload from '@/components/ui/FileUpload'
+import ScriptLibrary from '@/components/ui/ScriptLibrary'
 
 export default function Home() {
   return (
@@ -13,6 +16,9 @@ export default function Home() {
             Your AI scene partner for script practice
           </p>
         </div>
+
+        {/* Script Library */}
+        <ScriptLibrary />
 
         {/* Upload Area */}
         <FileUpload />
