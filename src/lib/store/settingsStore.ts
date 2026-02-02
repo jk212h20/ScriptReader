@@ -10,7 +10,7 @@ interface SettingsState {
   defaultVoiceRate: number
   defaultVoicePitch: number
   defaultVoiceVolume: number
-  useElevenLabs: boolean  // Toggle between Web Speech and ElevenLabs
+  useElevenLabs: boolean  // Toggle between Web Speech and ElevenLabs (server has default key)
   
   // Performance settings
   silenceThreshold: number  // seconds to wait before advancing

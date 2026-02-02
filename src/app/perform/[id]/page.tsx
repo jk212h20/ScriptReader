@@ -11,7 +11,7 @@ export default function PerformPage() {
   const router = useRouter()
   const params = useParams()
   const { currentScript, scripts, setCurrentScript } = useScriptStore()
-  const { useElevenLabs, elevenLabsApiKey } = useSettingsStore()
+  const { useElevenLabs } = useSettingsStore()
   
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentLineIndex, setCurrentLineIndex] = useState(0)
@@ -56,8 +56,8 @@ export default function PerformPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             text,
-            voiceDescription,
-            apiKey: elevenLabsApiKey
+            voiceDescription
+            // Server uses ELEVENLABS_API_KEY env var
           })
         })
 
@@ -90,7 +90,7 @@ export default function PerformPage() {
         reject(error)
       }
     })
-  }, [elevenLabsApiKey])
+  }, [])
 
   // Speak using Web Speech API
   const speakWithWebSpeech = useCallback(async (text: string): Promise<void> => {
@@ -104,7 +104,7 @@ export default function PerformPage() {
     setIsSpeaking(true)
     
     try {
-      if (useElevenLabs && elevenLabsApiKey) {
+      if (useElevenLabs) {
         const character = getCharacterVoice(line.character)
         await speakWithElevenLabs(line.text, character?.suggestedVoiceType)
       } else {
@@ -123,7 +123,7 @@ export default function PerformPage() {
     } finally {
       setIsSpeaking(false)
     }
-  }, [useElevenLabs, elevenLabsApiKey, getCharacterVoice, speakWithElevenLabs, speakWithWebSpeech])
+  }, [useElevenLabs, getCharacterVoice, speakWithElevenLabs, speakWithWebSpeech])
 
   const advanceToNextLine = useCallback(() => {
     if (!currentScript) return
@@ -228,7 +228,7 @@ export default function PerformPage() {
             <h1 className="text-lg font-bold">{currentScript.title}</h1>
             <div className="flex items-center gap-2 text-sm text-gray-500">
               <span>Line {currentLineIndex + 1} of {currentScript.lines.length}</span>
-              {useElevenLabs && elevenLabsApiKey && (
+              {useElevenLabs && (
                 <span className="px-2 py-0.5 bg-purple-900/50 text-purple-300 rounded text-xs">
                   ElevenLabs
                 </span>

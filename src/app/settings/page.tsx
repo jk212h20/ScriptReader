@@ -96,51 +96,25 @@ export default function SettingsPage() {
                 </p>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  ElevenLabs API Key
-                  <span className="text-gray-500 ml-1">(optional)</span>
-                </label>
-                <input
-                  type="password"
-                  value={elevenKey}
-                  onChange={(e) => setElevenKey(e.target.value)}
-                  placeholder="..."
-                  className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  For premium AI voices. Get your key at{' '}
-                  <a 
-                    href="https://elevenlabs.io/" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-blue-400 hover:underline"
-                  >
-                    elevenlabs.io
-                  </a>
-                </p>
-              </div>
-
-              {elevenKey && (
-                <div className="flex items-center justify-between p-4 bg-gray-900 rounded-lg">
-                  <div>
-                    <label className="text-sm font-medium">Use ElevenLabs Voices</label>
-                    <p className="text-xs text-gray-500">
-                      Premium AI voices for more realistic character speech
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setUseEleven(!useEleven)}
-                    className={`w-12 h-6 rounded-full transition-colors ${
-                      useEleven ? 'bg-purple-600' : 'bg-gray-700'
-                    }`}
-                  >
-                    <div className={`w-5 h-5 rounded-full bg-white transition-transform ${
-                      useEleven ? 'translate-x-6' : 'translate-x-0.5'
-                    }`} />
-                  </button>
+              {/* ElevenLabs Toggle - Server has default key */}
+              <div className="flex items-center justify-between p-4 bg-purple-900/20 border border-purple-500/30 rounded-lg">
+                <div>
+                  <label className="text-sm font-medium">Use ElevenLabs Voices</label>
+                  <p className="text-xs text-gray-400">
+                    Premium AI voices for realistic character speech
+                  </p>
                 </div>
-              )}
+                <button
+                  onClick={() => setUseEleven(!useEleven)}
+                  className={`w-12 h-6 rounded-full transition-colors ${
+                    useEleven ? 'bg-purple-600' : 'bg-gray-700'
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded-full bg-white transition-transform ${
+                    useEleven ? 'translate-x-6' : 'translate-x-0.5'
+                  }`} />
+                </button>
+              </div>
             </div>
           </section>
 
