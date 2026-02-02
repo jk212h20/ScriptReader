@@ -1,11 +1,26 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useScriptStore } from '@/lib/store/scriptStore'
 
 export default function ScriptLibrary() {
   const router = useRouter()
-  const { scripts, setCurrentScript, deleteScript } = useScriptStore()
+  const { scripts, isLoading, setCurrentScript, deleteScript, fetchScripts } = useScriptStore()
+
+  // Fetch scripts from server on mount
+  useEffect(() => {
+    fetchScripts()
+  }, [fetchScripts])
+
+  if (isLoading) {
+    return (
+      <div className="w-full text-center py-8">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-600 border-t-blue-500 mx-auto" />
+        <p className="text-gray-500 mt-2">Loading scripts...</p>
+      </div>
+    )
+  }
 
   if (scripts.length === 0) {
     return null
@@ -19,10 +34,10 @@ export default function ScriptLibrary() {
     }
   }
 
-  const handleDeleteScript = (e: React.MouseEvent, scriptId: string) => {
+  const handleDeleteScript = async (e: React.MouseEvent, scriptId: string) => {
     e.stopPropagation()
     if (confirm('Delete this script?')) {
-      deleteScript(scriptId)
+      await deleteScript(scriptId)
     }
   }
 
@@ -37,7 +52,7 @@ export default function ScriptLibrary() {
 
   return (
     <div className="w-full space-y-4">
-      <h2 className="text-lg font-semibold text-gray-300">Your Scripts</h2>
+      <h2 className="text-lg font-semibold text-gray-300">Available Scripts</h2>
       <div className="space-y-2">
         {scripts.map((script) => (
           <div

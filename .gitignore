@@ -46,3 +46,7 @@ next-env.d.ts
 # PWA
 public/sw.js
 public/workbox-*.js
+
+# Script data (stored on server, not in repo)
+# Note: DO NOT add data/ to gitignore for Railway deployment
+# The data folder needs to persist on the server

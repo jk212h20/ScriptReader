@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useScriptStore } from '@/lib/store/scriptStore'
 import ScriptDisplay from '@/components/script/ScriptDisplay'
@@ -9,26 +9,70 @@ import RoleAssignment from '@/components/script/RoleAssignment'
 export default function ScriptPage() {
   const router = useRouter()
   const params = useParams()
-  const { currentScript, scripts, setCurrentScript } = useScriptStore()
+  const { currentScript, scripts, setCurrentScript, fetchScript, saveScript } = useScriptStore()
   const [activeTab, setActiveTab] = useState<'script' | 'roles'>('script')
   const [isEditing, setIsEditing] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
 
+  // Load script from server or local state
   useEffect(() => {
-    const scriptId = params.id as string
-    
-    // If we don't have a current script or it's different, load from saved scripts
-    if (!currentScript || currentScript.id !== scriptId) {
-      const found = scripts.find(s => s.id === scriptId)
-      if (found) {
-        setCurrentScript(found)
+    const loadScript = async () => {
+      const scriptId = params.id as string
+      setIsLoading(true)
+      
+      // First check if we have it in local state
+      if (currentScript && currentScript.id === scriptId) {
+        setIsLoading(false)
+        return
+      }
+      
+      // Check local scripts array
+      const localScript = scripts.find(s => s.id === scriptId)
+      if (localScript) {
+        setCurrentScript(localScript)
+        setIsLoading(false)
+        return
+      }
+      
+      // Fetch from server
+      const serverScript = await fetchScript(scriptId)
+      if (serverScript) {
+        setCurrentScript(serverScript)
       } else {
         // Script not found, redirect home
         router.push('/')
       }
+      setIsLoading(false)
     }
-  }, [params.id, currentScript, scripts, setCurrentScript, router])
+    
+    loadScript()
+  }, [params.id, currentScript, scripts, setCurrentScript, fetchScript, router])
 
-  if (!currentScript) {
+  // Save script to server when done editing
+  const handleSaveScript = useCallback(async () => {
+    if (!currentScript) return
+    
+    setIsSaving(true)
+    try {
+      await saveScript(currentScript)
+    } catch (error) {
+      console.error('Failed to save script:', error)
+    } finally {
+      setIsSaving(false)
+    }
+  }, [currentScript, saveScript])
+
+  // Auto-save when exiting edit mode
+  const handleToggleEdit = async () => {
+    if (isEditing && currentScript) {
+      // Save when done editing
+      await handleSaveScript()
+    }
+    setIsEditing(!isEditing)
+  }
+
+  if (isLoading) {
     return (
       <main className="flex min-h-screen items-center justify-center">
         <div className="h-12 w-12 animate-spin rounded-full border-4 border-gray-600 border-t-blue-500" />
@@ -36,7 +80,25 @@ export default function ScriptPage() {
     )
   }
 
-  const handleStartPerformance = () => {
+  if (!currentScript) {
+    return (
+      <main className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-400">Script not found</p>
+          <button
+            onClick={() => router.push('/')}
+            className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg"
+          >
+            Go Home
+          </button>
+        </div>
+      </main>
+    )
+  }
+
+  const handleStartPerformance = async () => {
+    // Save before starting performance
+    await handleSaveScript()
     router.push(`/perform/${currentScript.id}`)
   }
 
@@ -53,14 +115,15 @@ export default function ScriptPage() {
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setIsEditing(!isEditing)}
+              onClick={handleToggleEdit}
+              disabled={isSaving}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 isEditing 
                   ? 'bg-yellow-600 hover:bg-yellow-700' 
                   : 'bg-gray-700 hover:bg-gray-600'
-              }`}
+              } ${isSaving ? 'opacity-50' : ''}`}
             >
-              {isEditing ? 'Done Editing' : 'Edit'}
+              {isSaving ? 'Saving...' : isEditing ? 'Done Editing' : 'Edit'}
             </button>
             <button
               onClick={handleStartPerformance}

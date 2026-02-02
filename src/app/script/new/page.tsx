@@ -81,7 +81,10 @@ export default function NewScriptPage() {
       // Save and set the script
       const script: Script = data.script
       setCurrentScript(script)
-      saveScript(script)
+      
+      // Save to server
+      setParsingStage('Saving script...')
+      await saveScript(script)
 
       // Clear pending and navigate to script view
       localStorage.removeItem('pendingScript')
